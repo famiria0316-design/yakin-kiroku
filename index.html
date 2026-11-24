@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>夜勤記録</title>
+<meta name="theme-color" content="#1f3a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="夜勤記録">
+<style>
+  :root { --main:#1f3a5f; --bg:#f4f6f9; --card:#fff; --text:#222; --sub:#666; --line:#d5dbe3; --warn:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; font-size:16px; }
+  header { background:var(--main); color:#fff; padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top));
+    display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:5; }
+  header h1 { font-size:18px; margin:0; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px 120px; }
+  section { background:var(--card); border-radius:12px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size:16px; margin:0 0 8px; }
+  .hint { font-size:13px; color:var(--sub); margin:4px 0 10px; line-height:1.6; }
+  textarea, input[type=date], input[type=text] { width:100%; font-size:16px; padding:10px; border:1px solid var(--line);
+    border-radius:8px; background:#fff; color:var(--text); font-family:inherit; }
+  textarea { min-height:180px; line-height:1.6; resize:vertical; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button { font-size:16px; padding:12px 16px; border-radius:10px; border:none; background:var(--main); color:#fff;
+    font-weight:600; cursor:pointer; font-family:inherit; }
+  button.sub { background:#e3e8ef; color:var(--text); }
+  button.danger { background:#fde8e8; color:#b91c1c; }
+  button.big { width:100%; padding:14px; font-size:17px; }
+  .person { border-top:1px solid var(--line); padding-top:10px; margin-top:10px; }
+  .person:first-child { border-top:none; margin-top:0; padding-top:0; }
+  .person-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .person-head b { font-size:15px; }
+  .person-head button { padding:6px 10px; font-size:13px; }
+  .person textarea { min-height:110px; }
+  .notes { font-size:13px; color:var(--warn); margin-top:6px; line-height:1.6; }
+  .notes span { display:inline-block; background:#fff7e6; border:1px solid #f5d9a8; border-radius:6px; padding:1px 6px; margin:2px 4px 2px 0; }
+  details summary { font-weight:600; cursor:pointer; padding:4px 0; }
+  details textarea { min-height:120px; font-size:15px; }
+  label.chk { display:flex; align-items:center; gap:6px; font-size:15px; margin-top:8px; }
+  .toast { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+    background:#333; color:#fff; padding:10px 16px; border-radius:20px; font-size:14px; opacity:0; transition:.3s; pointer-events:none; z-index:20; }
+  .toast.show { opacity:.95; }
+  #printArea { display:none; }
+
+  /* ---- 印刷(PDF) ---- */
+  @page { size: A4; margin: 14mm 15mm; }
+  @media print {
+    body { background:#fff; }
+    header, main, .toast { display:none !important; }
+    #printArea { display:block; color:#000; font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; }
+  }
+  #printArea .p-date { text-align:right; margin-bottom:4mm; }
+  #printArea .p-title { text-align:center; font-weight:bold; font-size:1.3em; margin-bottom:3mm; }
+  #printArea .p-person { margin-bottom:2.5mm; }
+  #printArea .p-head { font-weight:bold; margin-bottom:.5mm; }
+  #printArea .p-line { padding-left:1em; text-indent:-1em; line-height:1.55; }
+</style>
+</head>
+<body>
+<header>
+  <h1>夜勤記録</h1>
+  <span id="offline" style="font-size:12px;opacity:.85"></span>
+</header>
+
+<main>
+  <section>
+    <h2>日付</h2>
+    <div class="row">
+      <input type="date" id="date" style="flex:1;min-width:160px">
+    </div>
+    <label class="chk"><input type="checkbox" id="overnight" checked> 翌日まで(夜勤)として書く</label>
+    <label class="chk">タイトル <input type="text" id="title" placeholder="例:夜勤記録(空欄なら付けない)" style="flex:1"></label>
+  </section>
+
+  <section>
+    <h2>① 話す</h2>
+    <p class="hint">
+      キーボードのマイクで話してください。<br>
+      「<b>次行くよ</b>」で次の人へ。「<b>改行</b>」で段落を分けます。<br>
+      セリフは「<b>かっこ</b> … <b>かっことじ</b>」で「」になります。
+    </p>
+    <textarea id="raw" placeholder="ここに話した内容が入ります"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="big" id="btnFormat">② 整える ▶</button>
+    </div>
+  </section>
+
+  <section id="resultSec" hidden>
+    <h2>③ 確認・手直し</h2>
+    <p class="hint">各人の下のオレンジの欄が、自動で直したところです。間違っていたら文章を直接書き換えてください。</p>
+    <div id="persons"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="sub" id="btnAdd">+ 人を追加</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="big" id="btnPdf">④ PDFにする</button>
+    </div>
+    <p class="hint" id="pdfHint"></p>
+  </section>
+
+  <section>
+    <details>
+      <summary>設定(名前・置き換え)</summary>
+      <p class="hint">伏せ字にする名前を1行に1人ずつ。同じ人の呼び方が複数あるときは「,」で区切ります(例:山田,やまだ,太郎)。<br>
+        出てきた順に 〇〇さん/△△さん/□□さん… になります。<b>この内容はこの端末の中だけに保存されます。</b></p>
+      <textarea id="names" placeholder="山田,やまだ&#10;佐藤"></textarea>
+      <p class="hint" style="margin-top:14px">置き換え辞書(1行に「まちがい→正しい」)。音声の誤変換をここに足していくと、次から自動で直ります。</p>
+      <textarea id="dict"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="sub" id="btnDictReset">辞書を初期状態に戻す</button>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <button class="danger big" id="btnClear">記録を全部消す(勤務の終わりに)</button>
+    <p class="hint">記録はこの端末の中だけに保存され、外には送信されません。</p>
+  </section>
+</main>
+
+<div id="printArea"></div>
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
